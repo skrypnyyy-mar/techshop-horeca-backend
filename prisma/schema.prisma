@@ -1,0 +1,208 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  CLIENT
+  HORECA_MANAGER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum BookingType {
+  RENT
+  BUY
+}
+
+enum ProductCategory {
+  PHONES
+  LAPTOPS
+  AUDIO
+  WEARABLES
+  TABLETS
+  ACCESSORIES
+}
+
+enum HorecaCategory {
+  COFFEE_MACHINES
+  OVENS
+  REFRIGERATION
+  MIXERS
+  DISHWASHERS
+  STOVES
+  OTHER
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  phone        String?
+  role         Role     @default(CLIENT)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  orders        Order[]
+  bookings      Booking[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+// ─── Refresh Token ────────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ─── Product ──────────────────────────────────────────────────────────────────
+
+model Product {
+  id          String          @id @default(uuid())
+  name        String
+  tagline     String
+  description String
+  price       Decimal         @db.Decimal(10, 2)
+  category    ProductCategory
+  imageUrl    String          @map("image_url")
+  rating      Decimal         @default(0) @db.Decimal(3, 2)
+  reviewsCount Int            @default(0) @map("reviews_count")
+  colors      String[]
+  inStock     Boolean         @default(true) @map("in_stock")
+  stockCount  Int             @default(0) @map("stock_count")
+  brand       String?
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  orderItems OrderItem[]
+
+  @@map("products")
+}
+
+// ─── Order ────────────────────────────────────────────────────────────────────
+
+model Order {
+  id              String      @id @default(uuid())
+  userId          String      @map("user_id")
+  status          OrderStatus @default(PENDING)
+  totalAmount     Decimal     @map("total_amount") @db.Decimal(10, 2)
+  deliveryAddress String      @map("delivery_address")
+  notes           String?
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  user  User        @relation(fields: [userId], references: [id])
+  items OrderItem[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String  @id @default(uuid())
+  orderId      String  @map("order_id")
+  productId    String  @map("product_id")
+  quantity     Int
+  priceAtOrder Decimal @map("price_at_order") @db.Decimal(10, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@map("order_items")
+}
+
+// ─── HoReCa Item ──────────────────────────────────────────────────────────────
+
+model HorecaItem {
+  id          String         @id @default(uuid())
+  name        String
+  brand       String
+  tagline     String
+  description String
+  pricePerDay Decimal        @map("price_per_day") @db.Decimal(10, 2)
+  priceBuy    Decimal        @map("price_buy") @db.Decimal(10, 2)
+  category    HorecaCategory
+  imageUrl    String         @map("image_url")
+  power       String?
+  dimensions  String?
+  warranty    String?
+  inStock     Boolean        @default(true) @map("in_stock")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  specs    HorecaSpec[]
+  bookings Booking[]
+
+  @@map("horeca_items")
+}
+
+model HorecaSpec {
+  id           String @id @default(uuid())
+  horecaItemId String @map("horeca_item_id")
+  label        String
+  value        String
+
+  horecaItem HorecaItem @relation(fields: [horecaItemId], references: [id], onDelete: Cascade)
+
+  @@map("horeca_specs")
+}
+
+// ─── Booking ──────────────────────────────────────────────────────────────────
+
+model Booking {
+  id           String        @id @default(uuid())
+  userId       String        @map("user_id")
+  horecaItemId String        @map("horeca_item_id")
+  bookingType  BookingType   @map("booking_type")
+  status       BookingStatus @default(PENDING)
+  startDate    DateTime?     @map("start_date")
+  endDate      DateTime?     @map("end_date")
+  totalPrice   Decimal       @map("total_price") @db.Decimal(10, 2)
+  contactName  String        @map("contact_name")
+  contactPhone String        @map("contact_phone")
+  notes        String?
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id])
+  horecaItem HorecaItem @relation(fields: [horecaItemId], references: [id])
+
+  @@map("bookings")
+}
